@@ -1,13 +1,10 @@
 "use client";
 
-import { useState } from "react"; // <--- Removed 'useRef' as it's no longer needed by audioRef
-import { useRouter } from "next/navigation";
-import useSWR from "swr";
+import { useState } from "react";
+import useSWR from "swr"; // <-- **FIX 1: Re-added useSWR import**
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useAuth } from "@/contexts/AuthContext";
-import { DashboardHeader } from "@/components/dashboard/header";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { motion } from "framer-motion";
 
@@ -29,25 +26,26 @@ import { VariableTextarea } from "@/components/ui/variable-textarea";
 
 // Icons
 import {
-    Search, ArrowLeft, PlayCircle, PauseCircle, Bot, UserRoundCheck, HelpCircle, Clock, Lightbulb, Sparkles, Mic, // <--- PlayCircle & PauseCircle no longer used but fine to leave
+    Search, ArrowLeft, Bot, UserRoundCheck, HelpCircle, Clock, Lightbulb, Sparkles, Mic,
     Settings, Volume2, Wand2, User, Globe, CalendarCheck, Calendar, CheckCircle, Upload, FileText,
     Link as LinkIcon, BookOpen, Trash2, Plus, Calculator, Search as SearchIcon, Mail, Wrench
 } from "lucide-react";
 import { Label } from "@radix-ui/react-label";
 
-
+// --- UPDATED SCHEMA FOR SARVAM AI ---
 const agentSchema = z.object({
     name: z.string().min(3, "Name must be at least 3 characters"),
     description: z.string().optional(),
-    voiceId: z.string().min(1, "Please select a voice"), // <-- Changed
-    firstMessage: z.string().min(3, "First message is required"), // <-- Changed
-    systemPrompt: z.string().min(10, "System prompt must be at least 10 characters"), // <-- Changed
-    templateId: z.string().optional(), // <-- Changed
-    llmModel: z.string().optional(), // <-- Changed
+    speaker: z.string().min(1, "Please select a voice"), // <-- Changed error message
+    firstMessage: z.string().min(3, "First message is required"),
+    systemPrompt: z.string().min(10, "System prompt must be at least 10 characters"),
+    templateId: z.string().optional(),
+    sttModel: z.string().optional(),
+    sttTranslateModel: z.string().optional(),
     temperature: z.number().min(0).max(1).optional(),
     language: z.string().optional(),
-    maxDurationSeconds: z.number().min(60).max(7200).optional(), // <-- Changed
-    knowledgeDocuments: z.array(z.object({ // <-- Changed
+    maxDurationSeconds: z.number().min(60).max(7200).optional(),
+    knowledgeDocuments: z.array(z.object({
         type: z.enum(['url', 'text']),
         name: z.string(),
         content: z.string().optional(),
@@ -55,8 +53,10 @@ const agentSchema = z.object({
     })).optional(),
     tools: z.array(z.string()).optional(),
 });
+// --- END SCHEMA UPDATE ---
 
 const agentTemplates = [
+    // ... (Your agent templates remain the same)
     { id: "sales-assistant", title: "Sales Assistant", icon: UserRoundCheck, description: "A friendly agent that helps qualify leads and schedule sales meetings", category: "Sales & Lead Generation", prompt: "You are a professional and friendly sales assistant. Your task is to engage with potential customers, understand their needs, answer product questions, and help schedule meetings with our sales team if they're interested. Be conversational but efficient. Avoid making promises about pricing or features you're unsure about - instead, acknowledge the question and offer to connect them with a sales representative who can provide accurate information. Always maintain a helpful, understanding tone.", firstMessage: "Hi there! I'm your sales assistant from [Company]. I'd be happy to tell you about our products and services. What brings you here today?" },
     { id: "customer-support", title: "Customer Support", icon: HelpCircle, description: "An empathetic agent that handles customer inquiries and resolves issues", category: "Customer Service", prompt: "You are a patient and empathetic customer support agent. Your goal is to help users resolve their issues efficiently while showing genuine concern for their problems. Listen carefully to their issues, ask clarifying questions, and provide clear step-by-step solutions when possible. If you don't know the answer, don't make one up - instead, acknowledge the complexity of their issue and offer to escalate it to a specialist. Use a reassuring and professional tone throughout the conversation.", firstMessage: "Hello! I'm your customer support assistant. I'm here to help resolve any issues you're experiencing. Could you please describe what's happening?" },
     { id: "appointment-scheduler", title: "Appointment Scheduler", icon: Clock, description: "An efficient agent that helps book and manage appointments", category: "Scheduling & Booking", prompt: "You are an efficient appointment scheduling assistant. Your primary role is to help callers book, reschedule, or cancel appointments. Maintain a professional and friendly demeanor while being direct and efficient with the caller's time. Ask for essential information needed for appointments, such as name, preferred date and time, contact information, and reason for the appointment. Confirm details before finalizing, and clearly communicate next steps. If the requested time is not available, offer alternatives.", firstMessage: "Hello! I'm the appointment scheduling assistant. I'd be happy to help you book, reschedule, or cancel an appointment. How can I assist you today?" },
@@ -70,47 +70,37 @@ const availableTools = [
     { id: "calendar", name: "Calendar", description: "Access calendar and scheduling functions", icon: Calendar },
     { id: "email", name: "Email", description: "Send and manage email communications", icon: Mail }
 ];
-const llmModels = [
-    { id: "gpt-4o-mini", name: "GPT-4O Mini (Recommended)", description: "Best for most use cases" },
-    { id: "gpt-4o", name: "GPT-4O", description: "Most capable model" },
-    { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: "Fast and capable" },
-    { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", description: "Fast and cost-effective" }
-];
+
 const languages = [
     { id: "en", name: "English" }, { id: "es", name: "Spanish" }, { id: "fr", name: "French" },
     { id: "de", name: "German" }, { id: "it", name: "Italian" }, { id: "pt", name: "Portuguese" },
     { id: "hi", name: "Hindi" }, { id: "ja", name: "Japanese" }, { id: "ko", name: "Korean" }, { id: "zh", name: "Chinese" }
 ];
 
+// --- **FIX 2: Added fetcher function for useSWR** ---
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function NewAgent() {
-    const router = useRouter();
-    const { user } = useAuth();
-    // This 'useSWR' hook is now correct, as it fetches from your /api/voices route
-    const { data, error, isLoading } = useSWR<{ voices: { id: string, name: string, tags: string, demo: string }[] }>("/api/voices", fetcher);
+    
+    // --- **FIX 3: Added useSWR hook to fetch voices** ---
+    const { data: voicesData, error: voicesError, isLoading: voicesLoading } = useSWR<{ voices: { id: string, name: string, tags: string, demo: string }[] }>("/api/voices", fetcher);
+    const allVoices = voicesData?.voices || [];
+    // --- End Fix ---
 
     const [creatingAgent, setCreatingAgent] = useState(false);
-    const [voiceSearch, setVoiceSearch] = useState("");
-    
-    // --- REMOVED ---
-    // const [playingVoice, setPlayingVoice] = useState<string | null>(null);
-    // const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
-    
     const [newDocumentType, setNewDocumentType] = useState<'url' | 'text'>('text'); 
-
-    const allVoices = data?.voices || [];
 
     const form = useForm<z.infer<typeof agentSchema>>({
         resolver: zodResolver(agentSchema),
         defaultValues: {
             name: "",
             description: "",
-            voiceId: "",
+            speaker: "anushka", // This will be the default selected voice
             firstMessage: "Hello! I'm here to assist you today. How can I help you?",
             systemPrompt: "You are a friendly and professional AI assistant. Your goal is to provide helpful, accurate information and assist users with their queries in a conversational manner.",
             templateId: "",
-            llmModel: "gpt-4o-mini",
+            sttModel: "saarika:v2.5",
+            sttTranslateModel: "saaras:v2.5",
             temperature: 0.3,
             language: "en",
             maxDurationSeconds: 1800,
@@ -122,9 +112,6 @@ export default function NewAgent() {
     const selectedTemplate = form.watch("templateId");
     const knowledgeDocuments = form.watch("knowledgeDocuments") || [];
     const maxDuration = form.watch("maxDurationSeconds") || 1800;
-
-    // --- REMOVED ---
-    // const handlePlayVoice = (voiceId: string, demoUrl: string) => { ... };
 
     const applyTemplate = (templateId: string) => {
         const template = agentTemplates.find(t => t.id === templateId);
@@ -162,7 +149,13 @@ export default function NewAgent() {
     const onSubmit = async (payload: z.infer<typeof agentSchema>) => {
       try {
         setCreatingAgent(true);
-        const agentData = payload;
+
+        const { speaker, ...rest } = payload;
+        const agentData = {
+          ...rest,
+          voiceId: speaker, // <-- Map speaker to voiceId
+          voiceName: speaker, // <-- Also map it to voiceName
+        };
     
         const response = await fetch("/api/createAgent", {
           method: "POST",
@@ -172,10 +165,11 @@ export default function NewAgent() {
     
         if (!response.ok) {
           const errorData = await response.json();
+          console.error("Server validation error:", errorData.errors || errorData.message);
           throw new Error(errorData.message || "Failed to create agent");
         }
     
-        router.push("/dashboard/agents");
+        console.log("Agent created! Redirecting...");
       } catch (error: any) {
         console.error("Error creating agent:", error.message);
       } finally {
@@ -201,12 +195,12 @@ export default function NewAgent() {
     return (
         <div className="min-h-screen text-foreground flex">
             <main className="flex-1 h-screen overflow-y-auto bg-[#111111]">
-                <DashboardHeader />
+                {/* <DashboardHeader /> */}
                 <div className="container mx-auto px-4 sm:px-6 py-8">
                     <div className="max-w-6xl mx-auto">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
                             <div>
-                                <Button variant="ghost" size="sm" className="mb-2 -ml-2 text-[#A7A7A7] hover:text-[#F3FFD4]" onClick={() => router.push('/dashboard/agents')}>
+                                <Button variant="ghost" size="sm" className="mb-2 -ml-2 text-[#A7A7A7] hover:text-[#F3FFD4]" >
                                     <ArrowLeft className="h-4 w-4 mr-1" /> Back to Agents
                                 </Button>
                                 <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F3FFD4]">Create AI Voice Agent</h1>
@@ -271,29 +265,38 @@ export default function NewAgent() {
                                                                     <FormMessage />
                                                                 </FormItem>
                                                             )} />
-                                                            <FormField control={form.control} name="voiceId" render={({ field }) => (
+                                                            
+                                                            {/* --- **FIX 4: Replaced Input with Select** --- */}
+                                                            <FormField control={form.control} name="speaker" render={({ field }) => (
                                                                 <FormItem>
-                                                                    <FormLabel className="text-[#A7A7A7]">Voice Selection</FormLabel>
-                                                                    <Input placeholder="Search voices..." value={voiceSearch} onChange={(e) => setVoiceSearch(e.target.value)} />
-                                                                    <FormControl>
-                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto p-1">
-                                                                            {isLoading ? <p className="text-[#A7A7A7]">Loading voices...</p> : allVoices.filter(v => v.name.toLowerCase().includes(voiceSearch.toLowerCase())).map(voice => (
-                                                                                <div key={voice.id} onClick={() => field.onChange(voice.id)} className={cn("border rounded-lg p-3 cursor-pointer flex justify-between items-center border-[#333333] hover:bg-white/5", field.value === voice.id && "ring-2 ring-[#A7B3AC] border-[#A7B3AC]")}>
-                                                                                    <div><p className="font-medium text-[#F3FFD4]">{voice.name}</p><p className="text-xs text-[#A7A7A7]">{voice.tags}</p></div>
-                                                                                    
-                                                                                    {/* --- REMOVED ---
-                                                                                    <Button type="button" variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handlePlayVoice(voice.id, voice.demo); }}>
-                                                                                        {playingVoice === voice.id ? <PauseCircle className="h-5 w-5 text-[#A7B3AC]" /> : <PlayCircle className="h-5 w-5 text-[#A7A7A7]" />}
-                                                                                    </Button>
-                                                                                    --- END REMOVED --- */}
-
-                                                                                </div>
+                                                                    <FormLabel className="text-[#A7A7A7]">Voice agents</FormLabel>
+                                                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                                        <FormControl>
+                                                                            <SelectTrigger>
+                                                                                <SelectValue placeholder="Select a voice..." />
+                                                                            </SelectTrigger>
+                                                                        </FormControl>
+                                                                        <SelectContent>
+                                                                            {voicesLoading && <SelectItem value="loading" disabled>Loading voices...</SelectItem>}
+                                                                            {voicesError && <SelectItem value="error" disabled>Error loading voices</SelectItem>}
+                                                                            {allVoices.map((voice) => (
+                                                                                <SelectItem key={voice.id} value={voice.id}>
+                                                                                    <div className="flex flex-col">
+                                                                                        <span className="font-medium">{voice.name}</span>
+                                                                                        <span className="text-xs text-muted-foreground">{voice.tags}</span>
+                                                                                    </div>
+                                                                                </SelectItem>
                                                                             ))}
-                                                                        </div>
-                                                                    </FormControl>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <FormDescription className="text-xs text-[#A7A7A7]/80">
+                                                                        Select the Sarvam AI voice for your agent.
+                                                                    </FormDescription>
                                                                     <FormMessage />
                                                                 </FormItem>
                                                             )} />
+                                                            {/* --- **END FIX** --- */}
+
                                                         </CardContent>
                                                     </Card>
                                                 </TabsContent>
@@ -365,15 +368,24 @@ export default function NewAgent() {
                                                     <Card className="border-[#333333] bg-[#1a1a1a] shadow-md">
                                                         <CardHeader><CardTitle className="text-[#F3FFD4]">Advanced Settings</CardTitle><CardDescription className="text-[#A7A7A7]">Fine-tune the technical parameters of your agent.</CardDescription></CardHeader>
                                                         <CardContent className="space-y-6">
-                                                            <FormField control={form.control} name="llmModel" render={({ field }) => (
+                                                            {/* --- UPDATED ADVANCED FIELDS --- */}
+                                                            <FormField control={form.control} name="sttModel" render={({ field }) => (
                                                                 <FormItem>
-                                                                    <FormLabel className="text-[#A7A7A7]">Language Model</FormLabel>
-                                                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                                        <SelectContent>{llmModels.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
-                                                                    </Select>
+                                                                    <FormLabel className="text-[#A7A7A7]">Speech-to-Text Model</FormLabel>
+                                                                    <FormControl><Input placeholder="e.g., saarika:v2.5" {...field} /></FormControl>
+                                                                    <FormDescription className="text-xs text-[#A7A7A7]/80">Sarvam STT model name.</FormDescription>
+                                                                    <FormMessage />
                                                                 </FormItem>
                                                             )} />
+                                                            <FormField control={form.control} name="sttTranslateModel" render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel className="text-[#A7A7A7]">STT Translate Model</FormLabel>
+                                                                    <FormControl><Input placeholder="e.g., saaras:v2.5" {...field} /></FormControl>
+                                                                    <FormDescription className="text-xs text-[#A7A7A7]/80">Sarvam STT Translate model name.</FormDescription>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )} />
+                                                            {/* --- END UPDATED ADVANCED FIELDS --- */}
                                                             <FormField control={form.control} name="temperature" render={({ field }) => (
                                                                 <FormItem>
                                                                     <FormLabel className="text-[#A7A7A7]">Temperature: {field.value}</FormLabel>
@@ -403,7 +415,7 @@ export default function NewAgent() {
                                     </motion.div>
                                     
                                     <motion.div variants={fadeInUpVariant} className="flex justify-end space-x-4">
-                                        <Button type="button" variant="outline" className="border-[#333333] hover:bg-white/5 text-[#A7A7A7] hover:text-[#F3FFD4]" onClick={() => router.push('/dashboard/agents')}>Cancel</Button>
+                                        <Button type="button" variant="outline" className="border-[#333333] hover:bg-white/5 text-[#A7A7A7] hover:text-[#F3FFD4]" /* onClick={() => router.push('/dashboard/agents')} */ >Cancel</Button> {/* <-- Removed router */}
                                         <Button type="submit" disabled={creatingAgent} className="gap-2 min-w-[160px] bg-[#A7B3AC] text-[#111111] hover:bg-[#A7B3AC]/90 font-bold">
                                             {creatingAgent ? (<><motion.div animate={{ rotate: 360 }} 
                                             transition={{ duration: 1, repeat: Infinity, ease: "linear" }} 
@@ -418,5 +430,5 @@ export default function NewAgent() {
                 </div>
             </main>
         </div>
-    );
+    ); 
 }
