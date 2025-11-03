@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import useSWR from "swr"; // <-- **FIX 1: Re-added useSWR import**
+import useSWR from "swr"; 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { motion } from "framer-motion";
 
-// UI Components
+// --- **ADDED Combobox/Command imports** ---
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,28 +21,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // <-- ADDED
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"; // <-- ADDED
 import { cn } from "@/lib/utils";
 import { VariableTextarea } from "@/components/ui/variable-textarea";
 
-// Icons
+// --- **ADDED Combobox/Command icons** ---
 import {
     Search, ArrowLeft, Bot, UserRoundCheck, HelpCircle, Clock, Lightbulb, Sparkles, Mic,
     Settings, Volume2, Wand2, User, Globe, CalendarCheck, Calendar, CheckCircle, Upload, FileText,
-    Link as LinkIcon, BookOpen, Trash2, Plus, Calculator, Search as SearchIcon, Mail, Wrench
+    Link as LinkIcon, BookOpen, Trash2, Plus, Calculator, Search as SearchIcon, Mail, Wrench, Cpu,
+    ChevronsUpDown // <-- ADDED
 } from "lucide-react";
 import { Label } from "@radix-ui/react-label";
 
-// --- UPDATED SCHEMA FOR SARVAM AI ---
+// --- UPDATED SCHEMA FOR CARTESIA ---
 const agentSchema = z.object({
     name: z.string().min(3, "Name must be at least 3 characters"),
     description: z.string().optional(),
-    speaker: z.string().min(1, "Please select a voice"), // <-- Changed error message
+    voiceId: z.string().min(1, "Please select a voice"), // <-- Cartesia 'Sonic' TTS Model ID
     firstMessage: z.string().min(3, "First message is required"),
     systemPrompt: z.string().min(10, "System prompt must be at least 10 characters"),
     templateId: z.string().optional(),
-    sttModel: z.string().optional(),
-    sttTranslateModel: z.string().optional(),
-    temperature: z.number().min(0).max(1).optional(),
+    sttModel: z.string().min(1, "STT Model is required"), 
+    llmModel: z.string().min(1, "LLM Model is required"), 
+    temperature: z.number().min(0).max(2).optional(),
     language: z.string().optional(),
     maxDurationSeconds: z.number().min(60).max(7200).optional(),
     knowledgeDocuments: z.array(z.object({
@@ -60,9 +63,6 @@ const agentTemplates = [
     { id: "sales-assistant", title: "Sales Assistant", icon: UserRoundCheck, description: "A friendly agent that helps qualify leads and schedule sales meetings", category: "Sales & Lead Generation", prompt: "You are a professional and friendly sales assistant. Your task is to engage with potential customers, understand their needs, answer product questions, and help schedule meetings with our sales team if they're interested. Be conversational but efficient. Avoid making promises about pricing or features you're unsure about - instead, acknowledge the question and offer to connect them with a sales representative who can provide accurate information. Always maintain a helpful, understanding tone.", firstMessage: "Hi there! I'm your sales assistant from [Company]. I'd be happy to tell you about our products and services. What brings you here today?" },
     { id: "customer-support", title: "Customer Support", icon: HelpCircle, description: "An empathetic agent that handles customer inquiries and resolves issues", category: "Customer Service", prompt: "You are a patient and empathetic customer support agent. Your goal is to help users resolve their issues efficiently while showing genuine concern for their problems. Listen carefully to their issues, ask clarifying questions, and provide clear step-by-step solutions when possible. If you don't know the answer, don't make one up - instead, acknowledge the complexity of their issue and offer to escalate it to a specialist. Use a reassuring and professional tone throughout the conversation.", firstMessage: "Hello! I'm your customer support assistant. I'm here to help resolve any issues you're experiencing. Could you please describe what's happening?" },
     { id: "appointment-scheduler", title: "Appointment Scheduler", icon: Clock, description: "An efficient agent that helps book and manage appointments", category: "Scheduling & Booking", prompt: "You are an efficient appointment scheduling assistant. Your primary role is to help callers book, reschedule, or cancel appointments. Maintain a professional and friendly demeanor while being direct and efficient with the caller's time. Ask for essential information needed for appointments, such as name, preferred date and time, contact information, and reason for the appointment. Confirm details before finalizing, and clearly communicate next steps. If the requested time is not available, offer alternatives.", firstMessage: "Hello! I'm the appointment scheduling assistant. I'd be happy to help you book, reschedule, or cancel an appointment. How can I assist you today?" },
-    { id: "lead-qualification", title: "Lead Qualification", icon: User, description: "A strategic agent that qualifies leads based on specific criteria", category: "Sales & Lead Generation", prompt: "You are a lead qualification specialist. Your goal is to determine if the person you're speaking with is a good fit for our products/services based on specific qualification criteria. Ask thoughtful, strategic questions to understand their needs, budget, timeline, decision-making authority, and current pain points. Be conversational rather than interrogative. Look for signals that indicate whether they're a high-quality lead worth pursuing. When appropriate, explain how our solution addresses their specific needs. Remain professional and avoid being pushy. For qualified leads, offer to connect them with a sales representative for more detailed information.", firstMessage: "Hi there! Thanks for your interest in [Company]. I'd like to learn a bit about your needs to see how we might be able to help. Could you tell me what brought you to us today?" },
-    { id: "followup-scheduler", title: "Followup Scheduler", icon: Calendar, description: "A persistent agent that schedules follow-up calls and nurtures leads", category: "Sales & Lead Generation", prompt: "You are a follow-up scheduling specialist. Your role is to re-engage with prospects who have previously shown interest but haven't converted yet. Be friendly but persistent, reminding them of previous interactions without being pushy. Your main objective is to schedule a follow-up call or meeting with the appropriate team member. Ask about any changes in their situation or needs since the last contact. Address any concerns or objections tactfully. If they're not ready to schedule, identify when it would be appropriate to follow up again. Be helpful and professional throughout, focusing on providing value rather than just making a sale.", firstMessage: "Hello! I'm following up regarding your previous interest in [Company/Product]. I wanted to check in and see if you'd like to schedule some time to discuss how we can help you achieve your goals. How have things progressed since we last spoke?" },
-    { id: "booking-agent", title: "Booking Agent", icon: CalendarCheck, description: "A specialized agent focused on seamless booking experiences", category: "Scheduling & Booking", prompt: "You are a booking agent specializing in seamless reservation experiences. Your primary responsibility is to help customers make, modify, or cancel bookings efficiently. Guide callers through the booking process step by step, asking for all necessary information in a logical order. Clearly explain all options, availability, pricing, and policies. Suggest appropriate alternatives if first choices aren't available. Confirm all details before finalizing any booking. When dealing with changes or cancellations, be sympathetic yet clear about any applicable policies or fees. Maintain a professional, helpful attitude throughout the conversation, ensuring the customer feels valued regardless of the complexity of their request.", firstMessage: "Hello! I'm your booking assistant at [Company]. Whether you're looking to make a new reservation, modify an existing one, or have questions about our availability, I'm here to help. What type of booking would you like to discuss today?" },
 ];
 const availableTools = [
     { id: "web_search", name: "Web Search", description: "Search the internet for current information", icon: SearchIcon },
@@ -77,15 +77,12 @@ const languages = [
     { id: "hi", name: "Hindi" }, { id: "ja", name: "Japanese" }, { id: "ko", name: "Korean" }, { id: "zh", name: "Chinese" }
 ];
 
-// --- **FIX 2: Added fetcher function for useSWR** ---
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function NewAgent() {
     
-    // --- **FIX 3: Added useSWR hook to fetch voices** ---
     const { data: voicesData, error: voicesError, isLoading: voicesLoading } = useSWR<{ voices: { id: string, name: string, tags: string, demo: string }[] }>("/api/voices", fetcher);
     const allVoices = voicesData?.voices || [];
-    // --- End Fix ---
 
     const [creatingAgent, setCreatingAgent] = useState(false);
     const [newDocumentType, setNewDocumentType] = useState<'url' | 'text'>('text'); 
@@ -95,12 +92,12 @@ export default function NewAgent() {
         defaultValues: {
             name: "",
             description: "",
-            speaker: "anushka", // This will be the default selected voice
+            voiceId: "", // Start with no voice selected
             firstMessage: "Hello! I'm here to assist you today. How can I help you?",
             systemPrompt: "You are a friendly and professional AI assistant. Your goal is to provide helpful, accurate information and assist users with their queries in a conversational manner.",
             templateId: "",
-            sttModel: "saarika:v2.5",
-            sttTranslateModel: "saaras:v2.5",
+            sttModel: "ink-whisper", 
+            llmModel: "gpt-4o",      
             temperature: 0.3,
             language: "en",
             maxDurationSeconds: 1800,
@@ -112,6 +109,13 @@ export default function NewAgent() {
     const selectedTemplate = form.watch("templateId");
     const knowledgeDocuments = form.watch("knowledgeDocuments") || [];
     const maxDuration = form.watch("maxDurationSeconds") || 1800;
+
+    // Set default voice once loaded
+    useState(() => {
+        if (!voicesLoading && allVoices.length > 0 && !form.getValues("voiceId")) {
+            form.setValue("voiceId", allVoices[0].id);
+        }
+    }, [voicesLoading, allVoices, form]);
 
     const applyTemplate = (templateId: string) => {
         const template = agentTemplates.find(t => t.id === templateId);
@@ -150,11 +154,31 @@ export default function NewAgent() {
       try {
         setCreatingAgent(true);
 
-        const { speaker, ...rest } = payload;
         const agentData = {
-          ...rest,
-          voiceId: speaker, // <-- Map speaker to voiceId
-          voiceName: speaker, // <-- Also map it to voiceName
+          name: payload.name,
+          description: payload.description,
+          systemPrompt: payload.systemPrompt,
+          firstMessage: payload.firstMessage,
+          language: payload.language,
+          maxDurationSeconds: payload.maxDurationSeconds,
+          knowledgeDocuments: payload.knowledgeDocuments,
+          tools: payload.tools,
+          templateId: payload.templateId,
+          models: {
+            tts: {
+              provider: "cartesia",
+              model_id: payload.voiceId 
+            },
+            stt: {
+              provider: "cartesia",
+              model_id: payload.sttModel 
+            },
+            llm: {
+              provider: "openai", 
+              model_id: payload.llmModel, 
+              temperature: payload.temperature
+            }
+          }
         };
     
         const response = await fetch("/api/createAgent", {
@@ -266,36 +290,66 @@ export default function NewAgent() {
                                                                 </FormItem>
                                                             )} />
                                                             
-                                                            {/* --- **FIX 4: Replaced Input with Select** --- */}
-                                                            <FormField control={form.control} name="speaker" render={({ field }) => (
-                                                                <FormItem>
-                                                                    <FormLabel className="text-[#A7A7A7]">Voice agents</FormLabel>
-                                                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                                        <FormControl>
-                                                                            <SelectTrigger>
-                                                                                <SelectValue placeholder="Select a voice..." />
-                                                                            </SelectTrigger>
-                                                                        </FormControl>
-                                                                        <SelectContent>
-                                                                            {voicesLoading && <SelectItem value="loading" disabled>Loading voices...</SelectItem>}
-                                                                            {voicesError && <SelectItem value="error" disabled>Error loading voices</SelectItem>}
-                                                                            {allVoices.map((voice) => (
-                                                                                <SelectItem key={voice.id} value={voice.id}>
-                                                                                    <div className="flex flex-col">
-                                                                                        <span className="font-medium">{voice.name}</span>
-                                                                                        <span className="text-xs text-muted-foreground">{voice.tags}</span>
-                                                                                    </div>
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
+                                                            {/* --- **THIS IS THE NEW SEARCHABLE COMBOBOX** --- */}
+                                                            <FormField control={form.control} name="voiceId" render={({ field }) => (
+                                                                <FormItem className="flex flex-col">
+                                                                    <FormLabel className="text-[#A7A7A7]">Cartesia Voice (TTS)</FormLabel>
+                                                                    <Popover>
+                                                                        <PopoverTrigger asChild>
+                                                                            <FormControl>
+                                                                                <Button
+                                                                                    variant="outline"
+                                                                                    role="combobox"
+                                                                                    className={cn(
+                                                                                        "w-full justify-between",
+                                                                                        !field.value && "text-muted-foreground"
+                                                                                    )}
+                                                                                >
+                                                                                    {field.value
+                                                                                        ? allVoices.find((voice) => voice.id === field.value)?.name
+                                                                                        : "Select a voice..."}
+                                                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                                </Button>
+                                                                            </FormControl>
+                                                                        </PopoverTrigger>
+                                                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                                                            <Command>
+                                                                                <CommandInput placeholder="Search voice name..." />
+                                                                                <CommandEmpty>
+                                                                                    {voicesLoading ? "Loading voices..." : "No voice found."}
+                                                                                </CommandEmpty>
+                                                                                <CommandGroup>
+                                                                                    {allVoices.map((voice) => (
+                                                                                        <CommandItem
+                                                                                            value={voice.name} // This allows searching by name
+                                                                                            key={voice.id}
+                                                                                            onSelect={() => {
+                                                                                                form.setValue("voiceId", voice.id); // This sets the ID
+                                                                                            }}
+                                                                                        >
+                                                                                            <CheckCircle
+                                                                                                className={cn(
+                                                                                                    "mr-2 h-4 w-4",
+                                                                                                    voice.id === field.value ? "opacity-100 text-[#A7B3AC]" : "opacity-0"
+                                                                                                )}
+                                                                                            />
+                                                                                            <div className="flex flex-col">
+                                                                                                <span className="font-medium">{voice.name}</span>
+                                                                                                <span className="text-xs text-muted-foreground">{voice.tags}</span>
+                                                                                            </div>
+                                                                                        </CommandItem>
+                                                                                    ))}
+                                                                                </CommandGroup>
+                                                                            </Command>
+                                                                        </PopoverContent>
+                                                                    </Popover>
                                                                     <FormDescription className="text-xs text-[#A7A7A7]/80">
-                                                                        Select the Sarvam AI voice for your agent.
+                                                                        Select the Cartesia Sonic voice for your agent.
                                                                     </FormDescription>
                                                                     <FormMessage />
                                                                 </FormItem>
                                                             )} />
-                                                            {/* --- **END FIX** --- */}
+                                                            {/* --- **END OF NEW COMPONENT** --- */}
 
                                                         </CardContent>
                                                     </Card>
@@ -368,28 +422,29 @@ export default function NewAgent() {
                                                     <Card className="border-[#333333] bg-[#1a1a1a] shadow-md">
                                                         <CardHeader><CardTitle className="text-[#F3FFD4]">Advanced Settings</CardTitle><CardDescription className="text-[#A7A7A7]">Fine-tune the technical parameters of your agent.</CardDescription></CardHeader>
                                                         <CardContent className="space-y-6">
-                                                            {/* --- UPDATED ADVANCED FIELDS --- */}
+                                                            
+                                                            <FormField control={form.control} name="llmModel" render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel className="text-[#A7A7A7]">LLM Model</FormLabel>
+                                                                    <FormControl><Input placeholder="e.g., gpt-4o" {...field} /></FormControl>
+                                                                    <FormDescription className="text-xs text-[#A7A7A7]/80">The reasoning model (e.g., gpt-4o, claude-3-haiku).</FormDescription>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )} />
                                                             <FormField control={form.control} name="sttModel" render={({ field }) => (
                                                                 <FormItem>
                                                                     <FormLabel className="text-[#A7A7A7]">Speech-to-Text Model</FormLabel>
-                                                                    <FormControl><Input placeholder="e.g., saarika:v2.5" {...field} /></FormControl>
-                                                                    <FormDescription className="text-xs text-[#A7A7A7]/80">Sarvam STT model name.</FormDescription>
+                                                                    <FormControl><Input placeholder="e.g., ink-whisper" {...field} /></FormControl>
+                                                                    <FormDescription className="text-xs text-[#A7A7A7]/80">Cartesia 'Ink' STT model name.</FormDescription>
                                                                     <FormMessage />
                                                                 </FormItem>
                                                             )} />
-                                                            <FormField control={form.control} name="sttTranslateModel" render={({ field }) => (
-                                                                <FormItem>
-                                                                    <FormLabel className="text-[#A7A7A7]">STT Translate Model</FormLabel>
-                                                                    <FormControl><Input placeholder="e.g., saaras:v2.5" {...field} /></FormControl>
-                                                                    <FormDescription className="text-xs text-[#A7A7A7]/80">Sarvam STT Translate model name.</FormDescription>
-                                                                    <FormMessage />
-                                                                </FormItem>
-                                                            )} />
-                                                            {/* --- END UPDATED ADVANCED FIELDS --- */}
+                                                            
                                                             <FormField control={form.control} name="temperature" render={({ field }) => (
                                                                 <FormItem>
-                                                                    <FormLabel className="text-[#A7A7A7]">Temperature: {field.value}</FormLabel>
-                                                                    <FormControl><Slider min={0} max={1} step={0.1} value={[field.value || 0.3]} onValueChange={(v) => field.onChange(v[0])} /></FormControl>
+                                                                    <FormLabel className="text-[#A7A7A7]">LLM Temperature: {field.value}</FormLabel>
+                                                                    <FormControl><Slider min={0} max={2} step={0.1} value={[field.value || 0.3]} onValueChange={(v) => field.onChange(v[0])} /></FormControl>
+                                                                    <FormDescription className="text-xs text-[#A7A7A7]/80">Controls the creativity of the LLM. 0 is deterministic, 2 is very creative.</FormDescription>
                                                                 </FormItem>
                                                             )} />
                                                             <FormField control={form.control} name="language" render={({ field }) => (
@@ -403,7 +458,7 @@ export default function NewAgent() {
                                                             )} />
                                                             <FormField control={form.control} name="maxDurationSeconds" render={({ field }) => (
                                                                 <FormItem>
-                                                                    <FormLabel className="text-[#A7A7A7]">Max Call Duration: {Math.floor(maxDuration / 60)} minutes</FormLabel>
+                                                                    <FormLabel className="text-[#A7A7A7]">Max Call Duration: {Math.floor((field.value || 1800) / 60)} minutes</FormLabel>
                                                                     <FormControl><Slider min={60} max={7200} step={60} value={[field.value || 1800]} onValueChange={(v) => field.onChange(v[0])} /></FormControl>
                                                                 </FormItem>
                                                             )} />
@@ -415,7 +470,7 @@ export default function NewAgent() {
                                     </motion.div>
                                     
                                     <motion.div variants={fadeInUpVariant} className="flex justify-end space-x-4">
-                                        <Button type="button" variant="outline" className="border-[#333333] hover:bg-white/5 text-[#A7A7A7] hover:text-[#F3FFD4]" /* onClick={() => router.push('/dashboard/agents')} */ >Cancel</Button> {/* <-- Removed router */}
+                                        <Button type="button" variant="outline" className="border-[#333333] hover:bg-white/5 text-[#A7A7A7] hover:text-[#F3FFD4]">Cancel</Button>
                                         <Button type="submit" disabled={creatingAgent} className="gap-2 min-w-[160px] bg-[#A7B3AC] text-[#111111] hover:bg-[#A7B3AC]/90 font-bold">
                                             {creatingAgent ? (<><motion.div animate={{ rotate: 360 }} 
                                             transition={{ duration: 1, repeat: Infinity, ease: "linear" }} 

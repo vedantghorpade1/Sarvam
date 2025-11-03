@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
-import Agent from "@/models/agentModel";
+import Agent from "@/models/agentModel"; // <-- This now imports the updated Cartesia-aligned model
 import { getUserFromRequest } from "@/lib/jwt";
-import { getDefaultSystemTools } from "@/lib/systemTools";
-import mongoose from "mongoose"; // <-- **Import mongoose**
+import mongoose from "mongoose";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,17 +16,20 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
-    console.log("Creating agent configuration in local DB for Sarvam.ai integration.");
+    console.log("Creating agent configuration in local DB for Cartesia integration.");
 
+    // The ...body spread will now contain the nested 'models' object
+    // from the frontend, which matches our new Agent schema.
     const agent = new Agent({
       ...body,
       userId,
-      systemTools: getDefaultSystemTools(),
+      // systemTools: getDefaultSystemTools(), // <-- REMOVED: This is no longer in our simplified model
     });
 
-    agent.agentId = agent._id.toString();
+    // Use the internal DB _id as the agentId
+    agent.agentId = agent._id.toString(); 
     
-    await agent.save(); // <-- This is where the validation fails
+    await agent.save(); // <-- This will validate against the new Cartesia-aligned schema
 
     console.log("✅ Agent configuration saved to DB with id:", agent.agentId);
 
@@ -40,7 +42,6 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     console.error("FULL ERROR IN ROUTE:", err); 
 
-    // --- **BETTER ERROR HANDLING** ---
     // Check if this is a Mongoose validation error
     if (err instanceof mongoose.Error.ValidationError) {
       return NextResponse.json(
@@ -49,10 +50,9 @@ export async function POST(request: NextRequest) {
           // Send back the specific fields that failed
           errors: err.errors 
         },
-        { status: 400 } // 400 Bad Request is more accurate
+        { status: 400 } // 400 Bad Request
       );
     }
-    // --- **END BETTER ERROR HANDLING** ---
 
     // Generic fallback error
     return NextResponse.json(
