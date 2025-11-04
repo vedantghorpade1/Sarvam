@@ -9,10 +9,10 @@ export async function GET() {
   }
 
   try {
-    // --- **FIX: The API URL was wrong. Added /api/ prefix.** ---
-    const response = await fetch('https://api.cartesia.ai/api/v1/voices', {
+    // 1. Fetch voices from Cartesia's API
+    const response = await fetch('https://api.cartesia.ai/voices', {
       headers: {
-        'X-API-Key': CARTESIA_API_KEY,
+        'Authorization': `Bearer ${CARTESIA_API_KEY}`,
         'Content-Type': 'application/json',
         'Cartesia-Version': '2024-06-10', 
       },
@@ -21,24 +21,24 @@ export async function GET() {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Cartesia API Error:', errorText);
-      // Pass the specific error from Cartesia to the frontend
       throw new Error(`Cartesia API Error: ${response.statusText} - ${errorText}`);
     }
 
+    // The 'data' variable *is* the array, based on your log.
     const data = await response.json();
 
-    // The Cartesia API returns voices in a "data" property
-    if (!data || !Array.isArray(data.data)) {
-        console.error('Cartesia API response format is incorrect. Expected { data: [...] }', data);
-        throw new Error('Unexpected API response format from Cartesia.');
+    // --- **FIX: Check if 'data' itself is an array** ---
+    if (!Array.isArray(data)) {
+        console.error('Cartesia API response format is incorrect. Expected an array [...]', data);
+        throw new Error('Unexpected API response format from Cartesia. Expected an array.');
     }
 
-    // Map the Cartesia response to the format your frontend expects
-    const voices = data.data.map((voice: any) => ({
+    // --- **FIX: Map 'data' directly, not 'data.data'** ---
+    const voices = data.map((voice: any) => ({
       id: voice.id,
       name: voice.name,
       tags: voice.description || `Language: ${voice.language || 'en'}`, 
-      demo: '', // Cartesia's List API doesn't provide a demo/preview URL
+      demo: '', // The List API doesn't provide a demo URL
     }));
 
     return NextResponse.json({ voices: voices });

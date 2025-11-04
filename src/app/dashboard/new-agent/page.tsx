@@ -8,7 +8,7 @@ import * as z from "zod";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { motion } from "framer-motion";
 
-// --- **ADDED Combobox/Command imports** ---
+// UI Components
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,25 +21,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // <-- ADDED
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"; // <-- ADDED
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+// --- **CommandList is included for scrolling** ---
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { VariableTextarea } from "@/components/ui/variable-textarea";
 
-// --- **ADDED Combobox/Command icons** ---
+// Icons
 import {
     Search, ArrowLeft, Bot, UserRoundCheck, HelpCircle, Clock, Lightbulb, Sparkles, Mic,
     Settings, Volume2, Wand2, User, Globe, CalendarCheck, Calendar, CheckCircle, Upload, FileText,
     Link as LinkIcon, BookOpen, Trash2, Plus, Calculator, Search as SearchIcon, Mail, Wrench, Cpu,
-    ChevronsUpDown // <-- ADDED
+    ChevronsUpDown,
+    Circle, // <-- Added for radio button
+    PlayCircle // <-- Added for play button
 } from "lucide-react";
 import { Label } from "@radix-ui/react-label";
 
-// --- UPDATED SCHEMA FOR CARTESIA ---
+// Schema remains the same
 const agentSchema = z.object({
     name: z.string().min(3, "Name must be at least 3 characters"),
     description: z.string().optional(),
-    voiceId: z.string().min(1, "Please select a voice"), // <-- Cartesia 'Sonic' TTS Model ID
+    voiceId: z.string().min(1, "Please select a voice"), 
     firstMessage: z.string().min(3, "First message is required"),
     systemPrompt: z.string().min(10, "System prompt must be at least 10 characters"),
     templateId: z.string().optional(),
@@ -56,10 +59,9 @@ const agentSchema = z.object({
     })).optional(),
     tools: z.array(z.string()).optional(),
 });
-// --- END SCHEMA UPDATE ---
 
+// Templates and other constants remain the same
 const agentTemplates = [
-    // ... (Your agent templates remain the same)
     { id: "sales-assistant", title: "Sales Assistant", icon: UserRoundCheck, description: "A friendly agent that helps qualify leads and schedule sales meetings", category: "Sales & Lead Generation", prompt: "You are a professional and friendly sales assistant. Your task is to engage with potential customers, understand their needs, answer product questions, and help schedule meetings with our sales team if they're interested. Be conversational but efficient. Avoid making promises about pricing or features you're unsure about - instead, acknowledge the question and offer to connect them with a sales representative who can provide accurate information. Always maintain a helpful, understanding tone.", firstMessage: "Hi there! I'm your sales assistant from [Company]. I'd be happy to tell you about our products and services. What brings you here today?" },
     { id: "customer-support", title: "Customer Support", icon: HelpCircle, description: "An empathetic agent that handles customer inquiries and resolves issues", category: "Customer Service", prompt: "You are a patient and empathetic customer support agent. Your goal is to help users resolve their issues efficiently while showing genuine concern for their problems. Listen carefully to their issues, ask clarifying questions, and provide clear step-by-step solutions when possible. If you don't know the answer, don't make one up - instead, acknowledge the complexity of their issue and offer to escalate it to a specialist. Use a reassuring and professional tone throughout the conversation.", firstMessage: "Hello! I'm your customer support assistant. I'm here to help resolve any issues you're experiencing. Could you please describe what's happening?" },
     { id: "appointment-scheduler", title: "Appointment Scheduler", icon: Clock, description: "An efficient agent that helps book and manage appointments", category: "Scheduling & Booking", prompt: "You are an efficient appointment scheduling assistant. Your primary role is to help callers book, reschedule, or cancel appointments. Maintain a professional and friendly demeanor while being direct and efficient with the caller's time. Ask for essential information needed for appointments, such as name, preferred date and time, contact information, and reason for the appointment. Confirm details before finalizing, and clearly communicate next steps. If the requested time is not available, offer alternatives.", firstMessage: "Hello! I'm the appointment scheduling assistant. I'd be happy to help you book, reschedule, or cancel an appointment. How can I assist you today?" },
@@ -70,7 +72,6 @@ const availableTools = [
     { id: "calendar", name: "Calendar", description: "Access calendar and scheduling functions", icon: Calendar },
     { id: "email", name: "Email", description: "Send and manage email communications", icon: Mail }
 ];
-
 const languages = [
     { id: "en", name: "English" }, { id: "es", name: "Spanish" }, { id: "fr", name: "French" },
     { id: "de", name: "German" }, { id: "it", name: "Italian" }, { id: "pt", name: "Portuguese" },
@@ -86,13 +87,14 @@ export default function NewAgent() {
 
     const [creatingAgent, setCreatingAgent] = useState(false);
     const [newDocumentType, setNewDocumentType] = useState<'url' | 'text'>('text'); 
+    const [popoverOpen, setPopoverOpen] = useState(false);
 
     const form = useForm<z.infer<typeof agentSchema>>({
         resolver: zodResolver(agentSchema),
         defaultValues: {
             name: "",
             description: "",
-            voiceId: "", // Start with no voice selected
+            voiceId: "", 
             firstMessage: "Hello! I'm here to assist you today. How can I help you?",
             systemPrompt: "You are a friendly and professional AI assistant. Your goal is to provide helpful, accurate information and assist users with their queries in a conversational manner.",
             templateId: "",
@@ -219,7 +221,6 @@ export default function NewAgent() {
     return (
         <div className="min-h-screen text-foreground flex">
             <main className="flex-1 h-screen overflow-y-auto bg-[#111111]">
-                {/* <DashboardHeader /> */}
                 <div className="container mx-auto px-4 sm:px-6 py-8">
                     <div className="max-w-6xl mx-auto">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
@@ -290,11 +291,11 @@ export default function NewAgent() {
                                                                 </FormItem>
                                                             )} />
                                                             
-                                                            {/* --- **THIS IS THE NEW SEARCHABLE COMBOBOX** --- */}
+                                                            {/* --- **START: NEW DESIGN FROM SCREENSHOT** --- */}
                                                             <FormField control={form.control} name="voiceId" render={({ field }) => (
                                                                 <FormItem className="flex flex-col">
                                                                     <FormLabel className="text-[#A7A7A7]">Cartesia Voice (TTS)</FormLabel>
-                                                                    <Popover>
+                                                                    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
                                                                         <PopoverTrigger asChild>
                                                                             <FormControl>
                                                                                 <Button
@@ -318,28 +319,38 @@ export default function NewAgent() {
                                                                                 <CommandEmpty>
                                                                                     {voicesLoading ? "Loading voices..." : "No voice found."}
                                                                                 </CommandEmpty>
-                                                                                <CommandGroup>
-                                                                                    {allVoices.map((voice) => (
-                                                                                        <CommandItem
-                                                                                            value={voice.name} // This allows searching by name
-                                                                                            key={voice.id}
-                                                                                            onSelect={() => {
-                                                                                                form.setValue("voiceId", voice.id); // This sets the ID
-                                                                                            }}
-                                                                                        >
-                                                                                            <CheckCircle
-                                                                                                className={cn(
-                                                                                                    "mr-2 h-4 w-4",
-                                                                                                    voice.id === field.value ? "opacity-100 text-[#A7B3AC]" : "opacity-0"
-                                                                                                )}
-                                                                                            />
-                                                                                            <div className="flex flex-col">
-                                                                                                <span className="font-medium">{voice.name}</span>
-                                                                                                <span className="text-xs text-muted-foreground">{voice.tags}</span>
-                                                                                            </div>
-                                                                                        </CommandItem>
-                                                                                    ))}
-                                                                                </CommandGroup>
+                                                                                <CommandList> {/* This makes the list scrollable */}
+                                                                                    <CommandGroup>
+                                                                                        {allVoices.map((voice) => (
+                                                                                            <CommandItem
+                                                                                                value={voice.name} 
+                                                                                                key={voice.id}
+                                                                                                onSelect={() => {
+                                                                                                    form.setValue("voiceId", voice.id);
+                                                                                                    setPopoverOpen(false);
+                                                                                                }}
+                                                                                                className="flex items-center gap-3 cursor-pointer p-2"
+                                                                                            >
+                                                                                                {/* Radio button style indicator */}
+                                                                                                <div className="h-4 w-4 rounded-full border border-gray-500 flex items-center justify-center">
+                                                                                                    {voice.id === field.value && (
+                                                                                                        <div className="h-2 w-2 rounded-full bg-[#A7B3AC]"></div>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                                
+                                                                                                <div className="flex-1 flex flex-col">
+                                                                                                    <span className="font-medium">{voice.name}</span>
+                                                                                                    <span className="text-xs text-muted-foreground line-clamp-2">{voice.tags}</span>
+                                                                                                </div>
+                                                                                                
+                                                                                                {/* Play button (non-functional, for design) */}
+                                                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                                                                                                    <PlayCircle className="h-5 w-5" />
+                                                                                                </Button>
+                                                                                            </CommandItem>
+                                                                                        ))}
+                                                                                    </CommandGroup>
+                                                                                </CommandList>
                                                                             </Command>
                                                                         </PopoverContent>
                                                                     </Popover>
@@ -349,7 +360,7 @@ export default function NewAgent() {
                                                                     <FormMessage />
                                                                 </FormItem>
                                                             )} />
-                                                            {/* --- **END OF NEW COMPONENT** --- */}
+                                                            {/* --- **END: NEW DESIGN FROM SCREENSHOT** --- */}
 
                                                         </CardContent>
                                                     </Card>

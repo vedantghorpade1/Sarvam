@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
-import Agent from "@/models/agentModel"; // <-- This now imports the updated Cartesia-aligned model
+import Agent from "@/models/agentModel"; // <-- This imports the updated Cartesia-aligned model
 import { getUserFromRequest } from "@/lib/jwt";
 import mongoose from "mongoose";
 
@@ -18,12 +18,9 @@ export async function POST(request: NextRequest) {
 
     console.log("Creating agent configuration in local DB for Cartesia integration.");
 
-    // The ...body spread will now contain the nested 'models' object
-    // from the frontend, which matches our new Agent schema.
     const agent = new Agent({
       ...body,
       userId,
-      // systemTools: getDefaultSystemTools(), // <-- REMOVED: This is no longer in our simplified model
     });
 
     // Use the internal DB _id as the agentId
@@ -42,19 +39,16 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     console.error("FULL ERROR IN ROUTE:", err); 
 
-    // Check if this is a Mongoose validation error
     if (err instanceof mongoose.Error.ValidationError) {
       return NextResponse.json(
         { 
           message: "Agent validation failed", 
-          // Send back the specific fields that failed
           errors: err.errors 
         },
-        { status: 400 } // 400 Bad Request
+        { status: 400 } 
       );
     }
 
-    // Generic fallback error
     return NextResponse.json(
       { message: "Failed to create agent", error: err.message },
       { status: 500 }

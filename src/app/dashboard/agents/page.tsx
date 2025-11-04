@@ -40,63 +40,62 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import useSWR from 'swr'; // Import useSWR for data fetching
 
-// Agent type
+// --- FIX 1: Make Agent type backward-compatible ---
+// This type can now handle BOTH old and new agent structures
 type Agent = {
-    agent_id: string;
+    _id: string; // The unique database ID
+    agentId: string; // The agent's functional ID
     name: string;
     description: string;
-    disabled: boolean;
-    voice_id: string;
-    voiceName: string;
-    usage_minutes: number;
-    last_called_at: string | null;
-    template_name?: string;
-    llm_model: string;
-    temperature: number;
     language: string;
-    max_duration_seconds: number;
-    knowledge_documents: Array<any>;
-    tools: string[];
+    maxDurationSeconds: number; // This was in both schemas
+    usageMinutes: number;
+    lastCalledAt: string | null;
+    templateId?: string;
+    template_name?: string; // From old schema
+
+    // New Cartesia structure (optional)
+    models?: {
+        tts: { model_id: string }; 
+        llm: { model_id: string }; 
+    };
+
+    // Old ElevenLabs/Sarvam structure (optional)
+    disabled?: boolean;
+    voice_id?: string;
+    voiceName?: string;
+    llm_model?: string;
+    
+    // These might not be on every agent, so make them optional
+    firstMessage?: string;
+    systemPrompt?: string;
+    knowledgeDocuments?: Array<any>;
+    tools?: string[];
 };
+// --- END OF FIX 1 ---
+
+// Add the fetcher function for useSWR
+const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export default function AgentsPage() {
     const router = useRouter();
     const { user } = useAuth();
 
-    const [agents, setAgents] = useState<Agent[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    // --- FIX 2: Use SWR for live data fetching ---
+    const { data: agentsData, error, isLoading: loading, mutate } = useSWR<{ agents: Agent[] }>("/api/getAgents", fetcher);
+    const agents = agentsData?.agents || [];
+    // --- END OF FIX 2 ---
+
     const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
     const [deletingAgent, setDeletingAgent] = useState(false);
 
-    useEffect(() => {
-        const fetchAgents = async () => {
-            try {
-                setLoading(true);
-                const res = await fetch("/api/getAgents");
-
-                if (!res.ok) {
-                    throw new Error("Failed to fetch agents");
-                }
-
-                const data = await res.json();
-                setAgents(data.agents || []);
-            } catch (err: any) {
-                console.error("Error fetching agents:", err);
-                setError(err.message || "Unexpected error");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchAgents();
-    }, []);
-
-    const handleDeleteAgent = async (agentId: string) => {
+    const handleDeleteAgent = async (agentDatabaseId: string) => {
         try {
             setDeletingAgent(true);
-            const response = await fetch(`/api/agents/${agentId}`, {
+            // We use the database _id to delete, as it's always unique
+            const response = await fetch(`/api/agents/${agentDatabaseId}`, {
                 method: "DELETE",
             });
 
@@ -104,7 +103,8 @@ export default function AgentsPage() {
                 throw new Error("Failed to delete agent");
             }
 
-            setAgents((prev) => prev.filter((agent) => agent.agent_id !== agentId));
+            // Tell SWR to re-fetch the agent list
+            mutate(); 
             setAgentToDelete(null);
         } catch (err: any) {
             console.error("Error deleting agent:", err);
@@ -113,8 +113,32 @@ export default function AgentsPage() {
         }
     };
 
-    const getLanguageName = (code: string) => ({ en: "English", es: "Spanish", fr: "French" }[code] || code.toUpperCase());
-    const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}m`;
+    // --- FIX 3: Expanded getLanguageName to show full names (e.g., "Hindi" not "HI") ---
+    const getLanguageName = (code: string | undefined) => {
+        if (!code) return "Unknown";
+        const languageMap: { [key: string]: string } = {
+            en: "English",
+            es: "Spanish",
+            fr: "French",
+            de: "German",
+            it: "Italian",
+            pt: "Portuguese",
+            hi: "Hindi", // <-- ADDED
+            ja: "Japanese", // <-- ADDED
+            ko: "Korean", // <-- ADDED
+            zh: "Chinese", // <-- ADDED
+        };
+        return languageMap[code] || code.toUpperCase();
+    };
+    
+    // --- FIX 4: Handle undefined duration to prevent 'NaNm' error ---
+    const formatDuration = (seconds: number | undefined) => {
+        const safeSeconds = seconds || 0;
+        // Show N/A if duration is 0, which is more accurate than "0m"
+        if (safeSeconds === 0) return "N/A";
+        return `${Math.floor(safeSeconds / 60)}m`;
+    }
+    // --- END OF FIX 3 & 4 ---
 
     const containerVariant = {
         hidden: { opacity: 0 },
@@ -144,8 +168,8 @@ export default function AgentsPage() {
                         <div className="text-center text-[#A7A7A7]">Loading agents...</div>
                     ) : error ? (
                         <div className="text-center text-red-500">
-                            <p>Error loading agents: {error}</p>
-                            <Button variant="outline" onClick={() => window.location.reload()} className="mt-4">Retry</Button>
+                            <p>Error loading agents: {error.message}</p>
+                            <Button variant="outline" onClick={() => mutate()} className="mt-4">Retry</Button>
                         </div>
                     ) : agents.length === 0 ? (
                         <Card className="border-dashed border-[#333333] bg-[#1a1a1a]">
@@ -165,16 +189,17 @@ export default function AgentsPage() {
                             variants={containerVariant}
                             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                         >
+                            {/* --- FIX 5: Use backward-compatible data access --- */}
                             {agents.map((agent) => (
-                                <motion.div key={agent.agent_id} variants={itemVariant}>
-                                    <Card className={cn("overflow-hidden h-full flex flex-col bg-[#1a1a1a] border border-[#333333] hover:border-[#A7B3AC]/50 transition-colors", agent.disabled && "bg-[#222222]/50 hover:border-[#A7A7A7]/30")}>
+                                <motion.div key={agent._id} variants={itemVariant}> {/* Use _id for React key */}
+                                    <Card className={cn("overflow-hidden h-full flex flex-col bg-[#1a1a1a] border border-[#333333] hover:border-[#A7B3AC]/50 transition-colors", (agent.disabled ?? false) && "bg-[#222222]/50 hover:border-[#A7A7A7]/30")}>
                                         <CardHeader>
                                             <div className="flex justify-between items-start">
                                                 <div className="flex-1">
                                                     <CardTitle className="text-lg text-[#F3FFD4]">{agent.name}</CardTitle>
-                                                    {agent.template_name && (
+                                                    {(agent.template_name || agent.templateId) && (
                                                         <Badge variant="secondary" className="mt-1 text-xs bg-[#A7B3AC]/10 text-[#A7B3AC] border border-transparent">
-                                                            {agent.template_name}
+                                                            {agent.template_name || agent.templateId}
                                                         </Badge>
                                                     )}
                                                 </div>
@@ -185,10 +210,11 @@ export default function AgentsPage() {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end" className="bg-[#1a1a1a] border-[#333333] text-[#F3FFD4]">
-                                                        <DropdownMenuItem onClick={() => router.push(`/dashboard/agents/${agent.agent_id}/edit`)} className="cursor-pointer">
+                                                        {/* Use agent._id for edit/delete routes */}
+                                                        <DropdownMenuItem onClick={() => router.push(`/dashboard/agents/${agent._id}/edit`)} className="cursor-pointer">
                                                             <Pencil className="h-4 w-4 mr-2" /> Edit Agent
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => setAgentToDelete(agent.agent_id)} className="cursor-pointer text-destructive focus:text-destructive">
+                                                        <DropdownMenuItem onClick={() => setAgentToDelete(agent._id)} className="cursor-pointer text-destructive focus:text-destructive">
                                                             <Trash2 className="h-4 w-4 mr-2" /> Delete Agent
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>
@@ -205,33 +231,48 @@ export default function AgentsPage() {
                                                     <Volume2 className="h-5 w-5 text-[#A7B3AC]" />
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-medium text-[#F3FFD4]">Voice: {agent.voiceName}</p>
+                                                    {/* Safely read voice name from new OR old structure */}
+                                                    <p className="text-sm font-medium text-[#F3FFD4]">
+                                                        Voice: {agent.models?.tts?.model_id ?? agent.voiceName ?? 'Not Set'}
+                                                    </p>
+                                                    {/* This badge now uses the new getLanguageName function */}
                                                     <Badge variant="outline" className="text-xs mt-1 border-[#333333] text-[#A7A7A7]">
                                                         <Globe className="h-3 w-3 mr-1" />{getLanguageName(agent.language)}
                                                     </Badge>
+                                                    {/* Show disabled badge if agent is disabled */}
+                                                    {agent.disabled && (
+                                                        <Badge variant="outline" className="text-xs mt-1 ml-1 border-yellow-500/20 bg-yellow-500/10 text-yellow-400">
+                                                            Disabled
+                                                        </Badge>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="space-y-2 text-sm">
                                                 <div className="flex items-center justify-between text-[#F3FFD4]">
                                                     <span className="text-[#A7A7A7] flex items-center gap-2"><Clock className="h-4 w-4" />Last used</span>
-                                                    <span>{agent.last_called_at ? formatDistanceToNow(new Date(agent.last_called_at), { addSuffix: true }) : "Never"}</span>
+                                                    <span>{agent.lastCalledAt ? formatDistanceToNow(new Date(agent.lastCalledAt), { addSuffix: true }) : "Never"}</span>
                                                 </div>
                                                 <div className="flex items-center justify-between text-[#F3FFD4]">
                                                     <span className="text-[#A7A7A7] flex items-center gap-2"><Brain className="h-4 w-4" />Model</span>
-                                                    <Badge variant="outline" className="border-[#333333] text-[#A7A7A7]">{agent.llm_model}</Badge>
+                                                    {/* Safely read LLM model from new OR old structure */}
+                                                    <Badge variant="outline" className="border-[#333333] text-[#A7A7A7]">
+                                                        {agent.models?.llm?.model_id ?? agent.llm_model ?? 'N/A'}
+                                                    </Badge>
                                                 </div>
                                                 <div className="flex items-center justify-between text-[#F3FFD4]">
                                                     <span className="text-[#A7A7A7] flex items-center gap-2"><Timer className="h-4 w-4" />Max duration</span>
-                                                    <span>{formatDuration(agent.max_duration_seconds)}</span>
+                                                    {/* This now correctly handles undefined values */}
+                                                    <span>{formatDuration(agent.maxDurationSeconds)}</span>
                                                 </div>
                                             </div>
                                         </CardContent>
 
                                         <CardFooter className="border-t border-[#333333] pt-4 flex justify-between gap-2">
-                                            <Button variant="outline" size="sm" className="gap-2 w-full" onClick={() => router.push(`/dashboard/agents/${agent.agent_id}`)}>
+                                            <Button variant="outline" size="sm" className="gap-2 w-full" onClick={() => router.push(`/dashboard/agents/${agent._id}`)}>
                                                 <Settings className="h-4 w-4" /> Manage
                                             </Button>
-                                            <Button size="sm" className="gap-2 w-full" onClick={() => router.push(`/dashboard/calls/new?agent=${agent.agent_id}`)}>
+                                            {/* Pass the agentId (not _id) to the call page */}
+                                            <Button size="sm" className="gap-2 w-full" onClick={() => router.push(`/dashboard/calls?agentId=${agent.agentId}`)}>
                                                 <Phone className="h-4 w-4" /> Make Call
                                             </Button>
                                         </CardFooter>
@@ -262,3 +303,4 @@ export default function AgentsPage() {
         </div>
     );
 }
+
