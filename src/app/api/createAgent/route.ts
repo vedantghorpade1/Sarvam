@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     const agent = new Agent({
       ...body,
-      userId,
+      userId: new mongoose.Types.ObjectId(userId),
     });
 
     // Use the internal DB _id as the agentId

@@ -168,7 +168,7 @@ export default function NewAgent() {
           templateId: payload.templateId,
           models: {
             tts: {
-              provider: "cartesia",
+              provider: "bolna",
               model_id: payload.voiceId 
             },
             stt: {
@@ -294,7 +294,7 @@ export default function NewAgent() {
                                                             {/* --- **START: NEW DESIGN FROM SCREENSHOT** --- */}
                                                             <FormField control={form.control} name="voiceId" render={({ field }) => (
                                                                 <FormItem className="flex flex-col">
-                                                                    <FormLabel className="text-[#A7A7A7]">Cartesia Voice (TTS)</FormLabel>
+                                                                    <FormLabel className="text-[#A7A7A7]">Bolna Voice (TTS)</FormLabel>
                                                                     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
                                                                         <PopoverTrigger asChild>
                                                                             <FormControl>
@@ -355,7 +355,7 @@ export default function NewAgent() {
                                                                         </PopoverContent>
                                                                     </Popover>
                                                                     <FormDescription className="text-xs text-[#A7A7A7]/80">
-                                                                        Select the Cartesia Sonic voice for your agent.
+                                                                        Select the Bolna voice for your agent.
                                                                     </FormDescription>
                                                                     <FormMessage />
                                                                 </FormItem>
